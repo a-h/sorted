@@ -1,6 +1,10 @@
 package sorted
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"sort"
 	"sync/atomic"
 )
@@ -67,4 +71,98 @@ type mapValue[TKey comparable, TValue any] struct {
 	index int64
 	key   TKey
 	value TValue
+}
+
+// MarshalJSON marshals to JSON.
+func (m *Map[TKey, TValue]) MarshalJSON() (result []byte, err error) {
+	var k TKey
+	if reflect.TypeOf(k) != reflect.TypeOf("") {
+		return nil, &json.UnsupportedTypeError{
+			Type: reflect.TypeOf(k),
+		}
+	}
+	var buf bytes.Buffer
+	if _, err = buf.WriteString("{"); err != nil {
+		return
+	}
+	keys := m.Keys()
+	var kb []byte
+	for i, k := range keys {
+		// "key"
+		if kb, err = json.Marshal(k); err != nil {
+			return
+		}
+		if _, err = buf.Write(kb); err != nil {
+			return
+		}
+		// :
+		if _, err = buf.WriteString(":"); err != nil {
+			return
+		}
+		// "value"
+		v, _ := m.Get(k)
+		if kb, err = json.Marshal(v); err != nil {
+			return
+		}
+		if _, err = buf.Write(kb); err != nil {
+			return
+		}
+		// Skip trailing comma.
+		if i == len(keys)-1 {
+			break
+		}
+		// ","
+		if _, err = buf.WriteString(","); err != nil {
+			return
+		}
+	}
+	if _, err = buf.WriteString("}"); err != nil {
+		return
+	}
+	return json.RawMessage(buf.Bytes()), nil
+}
+
+// UnmarshalJSON marshals from JSON.
+func (m *Map[TKey, TValue]) UnmarshalJSON(data []byte) (err error) {
+	d := json.NewDecoder(bytes.NewReader(data))
+	// We expect...
+	// {
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := t.(json.Delim)
+	if !ok {
+		return fmt.Errorf("expected map start delimiter ('{') not found, got %T", t)
+	}
+	if delim.String() != "{" {
+		return fmt.Errorf("expected map start delimiter ('{') not found, got %q", delim.String())
+	}
+
+	nm := NewMap[TKey, TValue]()
+
+	// Next, get keys and values, until we get a close brace delimiter.
+	for {
+		t, err = d.Token()
+		if err != nil {
+			return err
+		}
+		delim, ok = t.(json.Delim)
+		if ok {
+			if delim.String() != "}" {
+				return fmt.Errorf("expected map close delimiter ('}') not found, got %q", delim.String())
+			}
+			break
+		}
+		// Read key and value.
+		var k TKey = t.(TKey)
+		var v TValue
+		if err = d.Decode(&v); err != nil {
+			return
+		}
+		nm.Add(k, v)
+	}
+
+	(*m) = (*nm)
+	return
 }

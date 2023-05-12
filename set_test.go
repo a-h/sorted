@@ -41,23 +41,51 @@ func TestSet(t *testing.T) {
 }
 
 func TestSetJSON(t *testing.T) {
-	set := NewSet("a", "b", "c")
-	actual, err := json.Marshal(set)
-	if err != nil {
-		t.Fatalf("Failed to marshal JSON: %v", err)
-	}
-	if string(actual) != `["a","b","c"]` {
-		t.Errorf("Unexpected JSON: %q", string(actual))
-	}
-	err = json.Unmarshal([]byte(`["d", "c", "a"]`), &set)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
-	if !reflect.DeepEqual(set.Values(), []string{"d", "c", "a"}) {
-		t.Errorf("Unexpected JSON unmarshal result: %#v", set.Values())
-	}
-	err = json.Unmarshal([]byte(`--...{`), &set)
-	if err == nil {
-		t.Errorf("Expected JSON unmarshal error not returned")
-	}
+	t.Run("marshalling sets is supported", func(t *testing.T) {
+		set := NewSet("a", "b", "c")
+		actual, err := json.Marshal(set)
+		if err != nil {
+			t.Fatalf("failed to marshal JSON: %v", err)
+		}
+		if string(actual) != `["a","b","c"]` {
+			t.Errorf("unexpected JSON: %q", string(actual))
+		}
+	})
+	t.Run("unmarshalling sets is supported", func(t *testing.T) {
+		var set *Set[string]
+		err := json.Unmarshal([]byte(`["d", "c", "a"]`), &set)
+		if err != nil {
+			t.Fatalf("failed to unmarshal JSON: %v", err)
+		}
+		if !reflect.DeepEqual(set.Values(), []string{"d", "c", "a"}) {
+			t.Errorf("unexpected JSON unmarshal result: %#v", set.Values())
+		}
+	})
+	t.Run("unmarshalling invalid JSON results in an error", func(t *testing.T) {
+		var set *Set[string]
+		err := json.Unmarshal([]byte(`--...{`), &set)
+		if err == nil {
+			t.Errorf("expected JSON unmarshal error not returned")
+		}
+	})
+	t.Run("marshalling null sets is supported", func(t *testing.T) {
+		var set *Set[string]
+		marshalled, err := json.Marshal(set)
+		if err != nil {
+			t.Fatalf("failed to marshal: %v", err)
+		}
+		if string(marshalled) != "null" {
+			t.Fatalf("expected 'null', got %v", string(marshalled))
+		}
+	})
+	t.Run("unmarshalling null sets is supported", func(t *testing.T) {
+		var set *Set[string]
+		err := json.Unmarshal([]byte("null"), &set)
+		if err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
+		}
+		if set != nil {
+			t.Fatalf("expected nil, got %v", set)
+		}
+	})
 }
